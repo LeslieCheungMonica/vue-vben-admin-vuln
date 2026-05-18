@@ -31,6 +31,15 @@ const routes: RouteRecordRaw[] = [
           title: $t('page.dashboard.workspace'),
         },
       },
+      {
+        name: 'TaskDetail',
+        path: 'task/detail/:taskId',
+        component: () => import('#/views/dashboard/workspace/detail.vue'),
+        meta: {
+          hideInMenu: true,
+          title: '任务详情',
+        },
+      },
     ],
   },
 ];

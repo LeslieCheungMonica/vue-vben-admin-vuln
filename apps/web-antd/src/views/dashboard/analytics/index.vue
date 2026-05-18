@@ -1,90 +1,236 @@
 <script lang="ts" setup>
-import type { AnalysisOverviewItem } from '@vben/common-ui';
-import type { TabOption } from '@vben/types';
+import { onMounted, ref } from 'vue';
+
+import { Page } from '@vben/common-ui';
 
 import {
-  AnalysisChartCard,
-  AnalysisChartsTabs,
-  AnalysisOverview,
-} from '@vben/common-ui';
+  Button,
+  Card,
+  Form,
+  Input,
+  message,
+  Modal,
+  Space,
+  Table,
+  Tag,
+  Upload,
+} from 'ant-design-vue';
+
 import {
-  SvgBellIcon,
-  SvgCakeIcon,
-  SvgCardIcon,
-  SvgDownloadIcon,
-} from '@vben/icons';
+  deleteResourceApi,
+  getResourceListApi,
+  uploadResourceApi,
+} from '#/api/core/resource';
+import type { ResourceApi } from '#/api/core/resource';
 
-import AnalyticsTrends from './analytics-trends.vue';
-import AnalyticsVisitsData from './analytics-visits-data.vue';
-import AnalyticsVisitsSales from './analytics-visits-sales.vue';
-import AnalyticsVisitsSource from './analytics-visits-source.vue';
-import AnalyticsVisits from './analytics-visits.vue';
+const UseModal = Modal.useModal();
+const [modalApi, contextHolder] = UseModal;
 
-const overviewItems: AnalysisOverviewItem[] = [
+const loading = ref(false);
+const resources = ref<ResourceApi.ResourceItem[]>([]);
+const filterCode = ref('');
+const filterVersion = ref('');
+
+const uploadModalVisible = ref(false);
+const uploadLoading = ref(false);
+const uploadForm = ref({
+  code: '',
+  version: '',
+  description: '',
+  file: null as File | null,
+});
+
+async function fetchList() {
+  loading.value = true;
+  try {
+    const res = await getResourceListApi(filterCode.value, filterVersion.value);
+    resources.value = res.items ?? [];
+  } catch {
+    message.error('获取资源列表失败');
+  } finally {
+    loading.value = false;
+  }
+}
+
+function handleDelete(record: ResourceApi.ResourceItem) {
+  modalApi.confirm({
+    content: `确定删除资源 [${record.code}:${record.version}] 吗？`,
+    okText: '删除',
+    okType: 'danger',
+    title: '确认删除',
+    onOk: async () => {
+      try {
+        await deleteResourceApi(record.id);
+        message.success('删除成功');
+        await fetchList();
+      } catch {
+        message.error('删除失败');
+      }
+    },
+  });
+}
+
+function handleFileChange(file: File) {
+  uploadForm.value.file = file;
+  return false;
+}
+
+async function handleUpload() {
+  if (!uploadForm.value.file) {
+    message.warning('请选择 ZIP 文件');
+    return;
+  }
+  if (!uploadForm.value.code) {
+    message.warning('请输入资源标识');
+    return;
+  }
+  if (!uploadForm.value.version) {
+    message.warning('请输入版本号');
+    return;
+  }
+
+  uploadLoading.value = true;
+  try {
+    const formData = new FormData();
+    formData.append('file', uploadForm.value.file);
+    formData.append('code', uploadForm.value.code);
+    formData.append('version', uploadForm.value.version);
+    if (uploadForm.value.description) {
+      formData.append('description', uploadForm.value.description);
+    }
+
+    await uploadResourceApi(formData);
+    message.success('上传成功');
+    uploadModalVisible.value = false;
+    uploadForm.value = { code: '', version: '', description: '', file: null };
+    await fetchList();
+  } catch {
+    message.error('上传失败');
+  } finally {
+    uploadLoading.value = false;
+  }
+}
+
+const columns = [
+  { dataIndex: 'id', key: 'id', title: 'ID', width: 80 },
+  { dataIndex: 'code', key: 'code', title: '资源标识', width: 150 },
+  { dataIndex: 'version', key: 'version', title: '版本号', width: 120 },
+  { dataIndex: 'description', key: 'description', title: '描述' },
   {
-    icon: SvgCardIcon,
-    title: '用户量',
-    totalTitle: '总用户量',
-    totalValue: 120_000,
-    value: 2000,
+    dataIndex: 'extracted_path',
+    key: 'extracted_path',
+    title: '解压路径',
+    ellipsis: true,
   },
   {
-    icon: SvgCakeIcon,
-    title: '访问量',
-    totalTitle: '总访问量',
-    totalValue: 500_000,
-    value: 20_000,
-  },
-  {
-    icon: SvgDownloadIcon,
-    title: '下载量',
-    totalTitle: '总下载量',
-    totalValue: 120_000,
-    value: 8000,
-  },
-  {
-    icon: SvgBellIcon,
-    title: '使用量',
-    totalTitle: '总使用量',
-    totalValue: 50_000,
-    value: 5000,
+    key: 'action',
+    title: '操作',
+    width: 100,
   },
 ];
 
-const chartTabs: TabOption[] = [
-  {
-    label: '流量趋势',
-    value: 'trends',
-  },
-  {
-    label: '月访问量',
-    value: 'visits',
-  },
-];
+onMounted(() => {
+  fetchList();
+});
 </script>
 
 <template>
-  <div class="p-5">
-    <AnalysisOverview :items="overviewItems" />
-    <AnalysisChartsTabs :tabs="chartTabs" class="mt-5">
-      <template #trends>
-        <AnalyticsTrends />
-      </template>
-      <template #visits>
-        <AnalyticsVisits />
-      </template>
-    </AnalysisChartsTabs>
+  <Page description="管理已上传的扫描资源" title="资源管理">
+    <Card class="mb-5">
+      <div class="flex flex-wrap items-center justify-between">
+        <Space>
+          <span class="text-sm text-gray-500">资源标识：</span>
+          <Input
+            v-model:value="filterCode"
+            class="w-40"
+            placeholder="按资源标识过滤"
+            @press-enter="fetchList"
+          />
+          <span class="text-sm text-gray-500">版本号：</span>
+          <Input
+            v-model:value="filterVersion"
+            class="w-40"
+            placeholder="按版本号过滤"
+            @press-enter="fetchList"
+          />
+          <Button type="primary" @click="fetchList">查询</Button>
+          <Button
+            @click="
+              filterCode = '';
+              filterVersion = '';
+              fetchList();
+            "
+          >
+            重置
+          </Button>
+        </Space>
+        <Button type="primary" @click="uploadModalVisible = true">
+          上传资源
+        </Button>
+      </div>
+    </Card>
 
-    <div class="mt-5 w-full md:flex">
-      <AnalysisChartCard class="mt-5 md:mt-0 md:mr-4 md:w-1/3" title="访问数量">
-        <AnalyticsVisitsData />
-      </AnalysisChartCard>
-      <AnalysisChartCard class="mt-5 md:mt-0 md:mr-4 md:w-1/3" title="访问来源">
-        <AnalyticsVisitsSource />
-      </AnalysisChartCard>
-      <AnalysisChartCard class="mt-5 md:mt-0 md:w-1/3" title="访问来源">
-        <AnalyticsVisitsSales />
-      </AnalysisChartCard>
-    </div>
-  </div>
+    <Card>
+      <Table
+        :columns="columns"
+        :data-source="resources"
+        :loading="loading"
+        :pagination="{
+          pageSize: 10,
+          showSizeChanger: true,
+          showTotal: (total: number) => `共 ${total} 条`,
+        }"
+        bordered
+        row-key="id"
+        size="middle"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'extracted_path'">
+            <Tag color="blue">{{ record.extracted_path }}</Tag>
+          </template>
+          <template v-if="column.key === 'action'">
+            <Button danger size="small" @click="handleDelete(record)">
+              删除
+            </Button>
+          </template>
+        </template>
+      </Table>
+    </Card>
+
+    <Modal
+      v-model:visible="uploadModalVisible"
+      :confirm-loading="uploadLoading"
+      cancel-text="取消"
+      ok-text="上传"
+      title="上传资源"
+      @ok="handleUpload"
+    >
+      <Form layout="vertical">
+        <Form.Item label="ZIP 文件" required>
+          <Upload
+            :before-upload="handleFileChange"
+            :show-upload-list="true"
+            accept=".zip"
+          >
+            <Button>选择文件</Button>
+          </Upload>
+        </Form.Item>
+        <Form.Item label="资源标识" required>
+          <Input v-model:value="uploadForm.code" placeholder="例如: myapp" />
+        </Form.Item>
+        <Form.Item label="版本号" required>
+          <Input v-model:value="uploadForm.version" placeholder="例如: v1.0" />
+        </Form.Item>
+        <Form.Item label="描述">
+          <Input.TextArea
+            v-model:value="uploadForm.description"
+            placeholder="资源描述（可选）"
+            :rows="3"
+          />
+        </Form.Item>
+      </Form>
+    </Modal>
+
+    <contextHolder />
+  </Page>
 </template>

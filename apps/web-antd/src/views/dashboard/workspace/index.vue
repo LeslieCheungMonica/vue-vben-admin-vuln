@@ -1,266 +1,548 @@
 <script lang="ts" setup>
-import type {
-  WorkbenchProjectItem,
-  WorkbenchQuickNavItem,
-  WorkbenchTodoItem,
-  WorkbenchTrendItem,
-} from '@vben/common-ui';
-
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
+import { Page } from '@vben/common-ui';
+
 import {
-  AnalysisChartCard,
-  WorkbenchHeader,
-  WorkbenchProject,
-  WorkbenchQuickNav,
-  WorkbenchTodo,
-  WorkbenchTrends,
-} from '@vben/common-ui';
-import { preferences } from '@vben/preferences';
-import { useUserStore } from '@vben/stores';
-import { openWindow } from '@vben/utils';
+  Button,
+  Card,
+  Checkbox,
+  Form,
+  Input,
+  message,
+  Modal,
+  Select,
+  Space,
+  Table,
+  Tabs,
+  Tag,
+  Tooltip,
+} from 'ant-design-vue';
 
-import AnalyticsVisitsSource from '../analytics/analytics-visits-source.vue';
-
-const userStore = useUserStore();
-
-// 这是一个示例数据，实际项目中需要根据实际情况进行调整
-// url 也可以是内部路由，在 navTo 方法中识别处理，进行内部跳转
-// 例如：url: /dashboard/workspace
-const projectItems: WorkbenchProjectItem[] = [
-  {
-    color: '',
-    content: '不要等待机会，而要创造机会。',
-    date: '2021-04-01',
-    group: '开源组',
-    icon: 'carbon:logo-github',
-    title: 'Github',
-    url: 'https://github.com',
-  },
-  {
-    color: '#3fb27f',
-    content: '现在的你决定将来的你。',
-    date: '2021-04-01',
-    group: '算法组',
-    icon: 'ion:logo-vue',
-    title: 'Vue',
-    url: 'https://vuejs.org',
-  },
-  {
-    color: '#e18525',
-    content: '没有什么才能比努力更重要。',
-    date: '2021-04-01',
-    group: '上班摸鱼',
-    icon: 'ion:logo-html5',
-    title: 'Html5',
-    url: 'https://developer.mozilla.org/zh-CN/docs/Web/HTML',
-  },
-  {
-    color: '#bf0c2c',
-    content: '热情和欲望可以突破一切难关。',
-    date: '2021-04-01',
-    group: 'UI',
-    icon: 'ion:logo-angular',
-    title: 'Angular',
-    url: 'https://angular.io',
-  },
-  {
-    color: '#00d8ff',
-    content: '健康的身体是实现目标的基石。',
-    date: '2021-04-01',
-    group: '技术牛',
-    icon: 'bx:bxl-react',
-    title: 'React',
-    url: 'https://reactjs.org',
-  },
-  {
-    color: '#EBD94E',
-    content: '路是走出来的，而不是空想出来的。',
-    date: '2021-04-01',
-    group: '架构组',
-    icon: 'ion:logo-javascript',
-    title: 'Js',
-    url: 'https://developer.mozilla.org/zh-CN/docs/Web/JavaScript',
-  },
-];
-
-// 同样，这里的 url 也可以使用以 http 开头的外部链接
-const quickNavItems: WorkbenchQuickNavItem[] = [
-  {
-    color: '#1fdaca',
-    icon: 'ion:home-outline',
-    title: '首页',
-    url: '/',
-  },
-  {
-    color: '#bf0c2c',
-    icon: 'ion:grid-outline',
-    title: '仪表盘',
-    url: '/dashboard',
-  },
-  {
-    color: '#e18525',
-    icon: 'ion:layers-outline',
-    title: '组件',
-    url: '/demos/features/icons',
-  },
-  {
-    color: '#3fb27f',
-    icon: 'ion:settings-outline',
-    title: '系统管理',
-    url: '/demos/features/login-expired', // 这里的 URL 是示例，实际项目中需要根据实际情况进行调整
-  },
-  {
-    color: '#4daf1bc9',
-    icon: 'ion:key-outline',
-    title: '权限管理',
-    url: '/demos/access/page-control',
-  },
-  {
-    color: '#00d8ff',
-    icon: 'ion:bar-chart-outline',
-    title: '图表',
-    url: '/analytics',
-  },
-];
-
-const todoItems = ref<WorkbenchTodoItem[]>([
-  {
-    completed: false,
-    content: `审查最近提交到Git仓库的前端代码，确保代码质量和规范。`,
-    date: '2024-07-30 11:00:00',
-    title: '审查前端代码提交',
-  },
-  {
-    completed: true,
-    content: `检查并优化系统性能，降低CPU使用率。`,
-    date: '2024-07-30 11:00:00',
-    title: '系统性能优化',
-  },
-  {
-    completed: false,
-    content: `进行系统安全检查，确保没有安全漏洞或未授权的访问。 `,
-    date: '2024-07-30 11:00:00',
-    title: '安全检查',
-  },
-  {
-    completed: false,
-    content: `更新项目中的所有npm依赖包，确保使用最新版本。`,
-    date: '2024-07-30 11:00:00',
-    title: '更新项目依赖',
-  },
-  {
-    completed: false,
-    content: `修复用户报告的页面UI显示问题，确保在不同浏览器中显示一致。 `,
-    date: '2024-07-30 11:00:00',
-    title: '修复UI显示问题',
-  },
-]);
-const trendItems: WorkbenchTrendItem[] = [
-  {
-    avatar: 'svg:avatar-1',
-    content: `在 <a>开源组</a> 创建了项目 <a>Vue</a>`,
-    date: '刚刚',
-    title: '威廉',
-  },
-  {
-    avatar: 'svg:avatar-2',
-    content: `关注了 <a>威廉</a> `,
-    date: '1个小时前',
-    title: '艾文',
-  },
-  {
-    avatar: 'svg:avatar-3',
-    content: `发布了 <a>个人动态</a> `,
-    date: '1天前',
-    title: '克里斯',
-  },
-  {
-    avatar: 'svg:avatar-4',
-    content: `发表文章 <a>如何编写一个Vite插件</a> `,
-    date: '2天前',
-    title: 'Vben',
-  },
-  {
-    avatar: 'svg:avatar-1',
-    content: `回复了 <a>杰克</a> 的问题 <a>如何进行项目优化？</a>`,
-    date: '3天前',
-    title: '皮特',
-  },
-  {
-    avatar: 'svg:avatar-2',
-    content: `关闭了问题 <a>如何运行项目</a> `,
-    date: '1周前',
-    title: '杰克',
-  },
-  {
-    avatar: 'svg:avatar-3',
-    content: `发布了 <a>个人动态</a> `,
-    date: '1周前',
-    title: '威廉',
-  },
-  {
-    avatar: 'svg:avatar-4',
-    content: `推送了代码到 <a>Github</a>`,
-    date: '2021-04-01 20:00',
-    title: '威廉',
-  },
-  {
-    avatar: 'svg:avatar-4',
-    content: `发表文章 <a>如何编写使用 Admin Vben</a> `,
-    date: '2021-03-01 20:00',
-    title: 'Vben',
-  },
-];
+import { getResourceListApi } from '#/api/core/resource';
+import type { ResourceApi } from '#/api/core/resource';
+import {
+  createTaskApi,
+  deleteTaskApi,
+  getTaskListApi,
+  startTaskApi,
+  stopTaskApi,
+  updateTaskApi,
+} from '#/api/core/task';
+import type { TaskApi } from '#/api/core/task';
 
 const router = useRouter();
 
-// 这是一个示例方法，实际项目中需要根据实际情况进行调整
-// This is a sample method, adjust according to the actual project requirements
-function navTo(nav: WorkbenchProjectItem | WorkbenchQuickNavItem) {
-  if (nav.url?.startsWith('http')) {
-    openWindow(nav.url);
-    return;
-  }
-  if (nav.url?.startsWith('/')) {
-    router.push(nav.url).catch((error) => {
-      console.error('Navigation failed:', error);
-    });
-  } else {
-    console.warn(`Unknown URL for navigation item: ${nav.title} -> ${nav.url}`);
+const UseModal = Modal.useModal();
+const [modalApi, contextHolder] = UseModal;
+
+const loading = ref(false);
+const tasks = ref<TaskApi.TaskItem[]>([]);
+const filterKeyword = ref('');
+
+const createModalVisible = ref(false);
+const createLoading = ref(false);
+const resources = ref<ResourceApi.ResourceItem[]>([]);
+const createForm = ref<TaskApi.TaskCreateParams>({
+  resource_id: 0,
+  task_name: '',
+  web_url: '',
+  code_desc: '',
+  scan_scope: '',
+  focus: '',
+  login_flow: '',
+  success_condition: '',
+  core_biz_domain: '',
+  core_biz_sub_domain_demo: '',
+});
+
+const editModalVisible = ref(false);
+const editLoading = ref(false);
+const editTask = ref<TaskApi.TaskItem | null>(null);
+const editForm = ref<TaskApi.TaskUpdateParams>({ task_id: '' });
+
+const scopeOptions = [
+  { label: '认证漏洞 (auth)', value: 'auth' },
+  { label: '越权 (zuthz)', value: 'zuthz' },
+  { label: '注入 (inject)', value: 'inject' },
+  { label: 'SSRF', value: 'ssrf' },
+  { label: 'XSS (xxs)', value: 'xxs' },
+  { label: '业务逻辑 (biz)', value: 'biz' },
+];
+
+const statusColorMap: Record<string, string> = {
+  'wait-to-start': 'default',
+  running: 'processing',
+  stopped: 'warning',
+  'run-except': 'error',
+};
+
+const statusLabelMap: Record<string, string> = {
+  'wait-to-start': '等待启动',
+  running: '运行中',
+  stopped: '已停止',
+  'run-except': '执行异常',
+};
+
+async function fetchTasks() {
+  loading.value = true;
+  try {
+    const res = await getTaskListApi(filterKeyword.value || undefined);
+    tasks.value = res.items ?? [];
+  } catch {
+    message.error('获取任务列表失败');
+  } finally {
+    loading.value = false;
   }
 }
+
+async function fetchResources() {
+  try {
+    const res = await getResourceListApi();
+    resources.value = res.items ?? [];
+  } catch {
+    console.error('获取资源列表失败');
+  }
+}
+
+function openCreateModal() {
+  createForm.value = {
+    resource_id: 0,
+    task_name: '',
+    web_url: '',
+    code_desc: '',
+    scan_scope: '',
+    focus: '',
+    login_flow: '',
+    success_condition: '',
+    core_biz_domain: '',
+    core_biz_sub_domain_demo: '',
+  };
+  createModalVisible.value = true;
+  fetchResources();
+}
+
+function handleScopeChange(checkedValues: string[]) {
+  createForm.value.scan_scope = checkedValues.join(',');
+}
+
+async function handleCreate() {
+  if (!createForm.value.resource_id) {
+    message.warning('请选择资源');
+    return;
+  }
+  if (!createForm.value.task_name) {
+    message.warning('请输入任务名称');
+    return;
+  }
+  if (!createForm.value.web_url) {
+    message.warning('请输入目标 Web 地址');
+    return;
+  }
+  if (!createForm.value.code_desc) {
+    message.warning('请输入项目描述');
+    return;
+  }
+  if (!createForm.value.scan_scope) {
+    message.warning('请选择扫描范围');
+    return;
+  }
+
+  createLoading.value = true;
+  try {
+    await createTaskApi(createForm.value);
+    message.success('任务创建成功');
+    createModalVisible.value = false;
+    await fetchTasks();
+  } catch {
+    message.error('创建任务失败');
+  } finally {
+    createLoading.value = false;
+  }
+}
+
+function handleStart(record: TaskApi.TaskItem) {
+  modalApi.confirm({
+    content: `确定启动任务 [${record.task_name}] 吗？`,
+    okText: '启动',
+    title: '确认启动',
+    onOk: async () => {
+      try {
+        await startTaskApi(record.task_id);
+        message.success('任务已启动');
+        await fetchTasks();
+      } catch {
+        message.error('启动任务失败');
+      }
+    },
+  });
+}
+
+function handleStop(record: TaskApi.TaskItem) {
+  modalApi.confirm({
+    content: `确定停止任务 [${record.task_name}] 吗？`,
+    okText: '停止',
+    title: '确认停止',
+    onOk: async () => {
+      try {
+        await stopTaskApi(record.task_id);
+        message.success('任务已停止');
+        await fetchTasks();
+      } catch {
+        message.error('停止任务失败');
+      }
+    },
+  });
+}
+
+function showDetail(record: TaskApi.TaskItem) {
+  router.push(`/dashboard/task/detail/${record.task_id}`);
+}
+
+function openEditModal(record: TaskApi.TaskItem) {
+  editTask.value = record;
+  editForm.value = {
+    task_id: record.task_id,
+    task_name: record.task_name,
+    web_url: record.web_url,
+    code_desc: record.code_desc,
+    scan_scope: record.scan_scope,
+    focus: record.focus,
+    login_flow: record.login_flow,
+    success_condition: record.success_condition,
+    core_biz_domain: record.core_biz_domain,
+    core_biz_sub_domain_demo: record.core_biz_sub_domain_demo,
+  };
+  editModalVisible.value = true;
+}
+
+function handleEditScopeChange(checkedValues: string[]) {
+  editForm.value.scan_scope = checkedValues.join(',');
+}
+
+async function handleUpdate() {
+  if (!editForm.value.task_name) {
+    message.warning('请输入任务名称');
+    return;
+  }
+  if (!editForm.value.web_url) {
+    message.warning('请输入目标 Web 地址');
+    return;
+  }
+  if (!editForm.value.code_desc) {
+    message.warning('请输入项目描述');
+    return;
+  }
+  if (!editForm.value.scan_scope) {
+    message.warning('请选择扫描范围');
+    return;
+  }
+
+  editLoading.value = true;
+  try {
+    await updateTaskApi(editForm.value);
+    message.success('任务更新成功');
+    editModalVisible.value = false;
+    await fetchTasks();
+  } catch {
+    message.error('更新任务失败');
+  } finally {
+    editLoading.value = false;
+  }
+}
+
+function handleDelete(record: TaskApi.TaskItem) {
+  modalApi.confirm({
+    content: `确定删除任务 [${record.task_name}] 吗？`,
+    okText: '删除',
+    okType: 'danger',
+    title: '确认删除',
+    onOk: async () => {
+      try {
+        await deleteTaskApi(record.task_id);
+        message.success('任务已删除');
+        await fetchTasks();
+      } catch {
+        message.error('删除任务失败');
+      }
+    },
+  });
+}
+
+const columns = [
+  {
+    dataIndex: 'task_id',
+    key: 'task_id',
+    title: '任务 ID',
+    width: 160,
+    ellipsis: true,
+  },
+  {
+    dataIndex: 'task_name',
+    key: 'task_name',
+    title: '任务名称',
+    width: 140,
+    ellipsis: true,
+  },
+  {
+    dataIndex: 'web_url',
+    key: 'web_url',
+    title: '目标地址',
+    width: 160,
+    ellipsis: true,
+  },
+  { dataIndex: 'scan_scope', key: 'scan_scope', title: '扫描范围', width: 140 },
+  { dataIndex: 'status', key: 'status', title: '状态', width: 100 },
+  { dataIndex: 'created_at', key: 'created_at', title: '创建时间', width: 160 },
+  { key: 'action', title: '操作', width: 180, fixed: 'right' },
+];
+
+onMounted(() => {
+  fetchTasks();
+});
 </script>
 
 <template>
-  <div class="p-5">
-    <WorkbenchHeader
-      :avatar="userStore.userInfo?.avatar || preferences.app.defaultAvatar"
-    >
-      <template #title>
-        早安, {{ userStore.userInfo?.realName }}, 开始您一天的工作吧！
-      </template>
-      <template #description> 今日晴，20℃ - 32℃！ </template>
-    </WorkbenchHeader>
+  <Page description="管理扫描任务的创建、启动与监控" title="任务管理">
+    <Card class="mb-5">
+      <div class="flex flex-wrap items-center justify-between">
+        <Space>
+          <span class="text-sm text-gray-500">任务 ID：</span>
+          <Input
+            v-model:value="filterKeyword"
+            class="w-60"
+            placeholder="按任务 ID 模糊搜索"
+            @press-enter="fetchTasks"
+          />
+          <Button type="primary" @click="fetchTasks">查询</Button>
+          <Button
+            @click="
+              filterKeyword = '';
+              fetchTasks();
+            "
+            >重置</Button
+          >
+        </Space>
+        <Button type="primary" @click="openCreateModal">创建任务</Button>
+      </div>
+    </Card>
 
-    <div class="mt-5 flex flex-col lg:flex-row">
-      <div class="mr-4 w-full lg:w-3/5">
-        <WorkbenchProject :items="projectItems" title="项目" @click="navTo" />
-        <WorkbenchTrends :items="trendItems" class="mt-5" title="最新动态" />
-      </div>
-      <div class="w-full lg:w-2/5">
-        <WorkbenchQuickNav
-          :items="quickNavItems"
-          class="mt-5 lg:mt-0"
-          title="快捷导航"
-          @click="navTo"
-        />
-        <WorkbenchTodo :items="todoItems" class="mt-5" title="待办事项" />
-        <AnalysisChartCard class="mt-5" title="访问来源">
-          <AnalyticsVisitsSource />
-        </AnalysisChartCard>
-      </div>
-    </div>
-  </div>
+    <Card>
+      <Table
+        :columns="columns"
+        :data-source="tasks"
+        :loading="loading"
+        :pagination="{
+          pageSize: 10,
+          showSizeChanger: true,
+          showTotal: (total: number) => `共 ${total} 条`,
+        }"
+        :scroll="{ x: 'max-content' }"
+        bordered
+        row-key="task_id"
+        size="small"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'status'">
+            <Tag :color="statusColorMap[record.status] || 'default'">
+              {{ statusLabelMap[record.status] || record.status }}
+            </Tag>
+          </template>
+          <template v-if="column.key === 'scan_scope'">
+            <Space :size="4" wrap>
+              <Tag v-for="s in record.scan_scope.split(',')" :key="s">
+                {{ s }}
+              </Tag>
+            </Space>
+          </template>
+          <template v-if="column.key === 'action'">
+            <Space :size="4">
+              <Tooltip
+                v-if="record.status === 'wait-to-start' || !record.status"
+                title="启动任务"
+              >
+                <Button
+                  size="small"
+                  type="primary"
+                  @click="handleStart(record)"
+                >
+                  启动
+                </Button>
+              </Tooltip>
+              <Tooltip v-else-if="record.status === 'running'" title="停止任务">
+                <Button size="small" @click="handleStop(record)">停止</Button>
+              </Tooltip>
+              <span v-else class="text-gray-300 text-xs cursor-not-allowed"
+                >—</span
+              >
+              <Button size="small" @click="showDetail(record)">详情</Button>
+              <Button size="small" @click="openEditModal(record)">编辑</Button>
+              <Button danger size="small" @click="handleDelete(record)"
+                >删除</Button
+              >
+            </Space>
+          </template>
+        </template>
+      </Table>
+    </Card>
+
+    <Modal
+      v-model:visible="createModalVisible"
+      :confirm-loading="createLoading"
+      :width="700"
+      cancel-text="取消"
+      ok-text="创建"
+      title="创建扫描任务"
+      @ok="handleCreate"
+    >
+      <Form layout="vertical">
+        <Form.Item label="选择资源" required>
+          <Select
+            v-model:value="createForm.resource_id"
+            :options="
+              resources.map((r) => ({
+                label: `${r.code}:${r.version} - ${r.description || '无描述'}`,
+                value: r.id,
+              }))
+            "
+            placeholder="请选择已上传的资源"
+          />
+        </Form.Item>
+        <Form.Item label="任务名称" required>
+          <Input
+            v-model:value="createForm.task_name"
+            placeholder="例如: myapp-安全扫描"
+          />
+        </Form.Item>
+        <Form.Item label="目标 Web 地址" required>
+          <Input
+            v-model:value="createForm.web_url"
+            placeholder="例如: https://example.com"
+          />
+        </Form.Item>
+        <Form.Item label="项目描述" required>
+          <Input.TextArea
+            v-model:value="createForm.code_desc"
+            placeholder="描述项目背景和功能"
+            :rows="2"
+          />
+        </Form.Item>
+        <Form.Item label="扫描范围" required>
+          <Checkbox.Group :options="scopeOptions" @change="handleScopeChange" />
+        </Form.Item>
+        <Form.Item label="重点关注领域">
+          <Input
+            v-model:value="createForm.focus"
+            placeholder="例如: 认证授权"
+          />
+        </Form.Item>
+        <Form.Item label="登录流程说明">
+          <Input.TextArea
+            v-model:value="createForm.login_flow"
+            placeholder="例如: 表单登录，输入用户名密码后提交 POST /api/login"
+            :rows="2"
+          />
+        </Form.Item>
+        <Form.Item label="登录成功判断条件">
+          <Input
+            v-model:value="createForm.success_condition"
+            placeholder="例如: 返回200且body包含token字段"
+          />
+        </Form.Item>
+        <Form.Item label="核心业务域">
+          <Input
+            v-model:value="createForm.core_biz_domain"
+            placeholder="例如: 订单系统"
+          />
+        </Form.Item>
+        <Form.Item label="子业务域示例">
+          <Input
+            v-model:value="createForm.core_biz_sub_domain_demo"
+            placeholder="例如: 创建订单、支付回调"
+          />
+        </Form.Item>
+      </Form>
+    </Modal>
+
+    <Modal
+      v-model:visible="editModalVisible"
+      :confirm-loading="editLoading"
+      :width="700"
+      cancel-text="取消"
+      ok-text="保存"
+      title="编辑任务"
+      @ok="handleUpdate"
+    >
+      <Tabs v-if="editTask" type="card">
+        <Tabs.TabPane key="basic" tab="基础信息">
+          <Form layout="vertical">
+            <Form.Item label="任务 ID">
+              <Input :value="editTask.task_id" disabled />
+            </Form.Item>
+            <Form.Item label="资源 ID">
+              <Input :value="editTask.resource_id" disabled />
+            </Form.Item>
+            <Form.Item label="状态">
+              <Input
+                :value="statusLabelMap[editTask.status] || editTask.status"
+                disabled
+              />
+            </Form.Item>
+            <Form.Item label="创建时间">
+              <Input :value="editTask.created_at" disabled />
+            </Form.Item>
+            <Form.Item label="任务名称" required>
+              <Input v-model:value="editForm.task_name" />
+            </Form.Item>
+            <Form.Item label="目标 Web 地址" required>
+              <Input v-model:value="editForm.web_url" />
+            </Form.Item>
+            <Form.Item label="项目描述" required>
+              <Input.TextArea v-model:value="editForm.code_desc" :rows="3" />
+            </Form.Item>
+            <Form.Item label="扫描范围" required>
+              <Checkbox.Group
+                :options="scopeOptions"
+                :value="
+                  editForm.scan_scope ? editForm.scan_scope.split(',') : []
+                "
+                @change="handleEditScopeChange"
+              />
+            </Form.Item>
+          </Form>
+        </Tabs.TabPane>
+        <Tabs.TabPane key="intel" tab="情报指导">
+          <Form layout="vertical">
+            <Form.Item label="重点关注领域">
+              <Input.TextArea v-model:value="editForm.focus" :rows="3" />
+            </Form.Item>
+            <Form.Item label="登录流程说明">
+              <Input.TextArea v-model:value="editForm.login_flow" :rows="3" />
+            </Form.Item>
+            <Form.Item label="登录成功判断条件">
+              <Input.TextArea
+                v-model:value="editForm.success_condition"
+                :rows="3"
+              />
+            </Form.Item>
+            <Form.Item label="核心业务域">
+              <Input.TextArea
+                v-model:value="editForm.core_biz_domain"
+                :rows="3"
+              />
+            </Form.Item>
+            <Form.Item label="子业务域示例">
+              <Input.TextArea
+                v-model:value="editForm.core_biz_sub_domain_demo"
+                :rows="3"
+              />
+            </Form.Item>
+          </Form>
+        </Tabs.TabPane>
+      </Tabs>
+    </Modal>
+
+    <contextHolder />
+  </Page>
 </template>

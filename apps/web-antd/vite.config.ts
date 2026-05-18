@@ -6,6 +6,12 @@ export default defineConfig(async () => {
     vite: {
       server: {
         proxy: {
+          '/api/wape': {
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/api/, ''),
+            target: 'http://localhost:7654',
+            ws: true,
+          },
           '/api': {
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/api/, ''),
