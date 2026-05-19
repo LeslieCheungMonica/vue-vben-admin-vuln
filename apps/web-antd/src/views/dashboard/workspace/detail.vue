@@ -532,6 +532,40 @@ function backToBizModuleList() {
   bizVulnExploitList.value = [];
 }
 
+const bizExploitPdfUrl = ref<string | null>(null);
+const bizExploitPdfLoading = ref(false);
+const selectedBizExploitName = ref<string | null>(null);
+const showBizExploitModuleList = ref(true);
+
+async function loadBizExploitPdf(bizName: string) {
+  const taskId = route.params.taskId as string;
+  if (!taskId) return;
+  bizExploitPdfLoading.value = true;
+  selectedBizExploitName.value = bizName;
+  showBizExploitModuleList.value = false;
+  bizExploitPdfUrl.value = null;
+  try {
+    const url = `/api/wape/biz_exploit_report_pdf/${taskId}/${encodeURIComponent(bizName)}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('PDF not found');
+    const blob = await resp.blob();
+    bizExploitPdfUrl.value = URL.createObjectURL(blob);
+  } catch {
+    bizExploitPdfUrl.value = null;
+  } finally {
+    bizExploitPdfLoading.value = false;
+  }
+}
+
+function backBizExploitToModuleList() {
+  showBizExploitModuleList.value = true;
+  selectedBizExploitName.value = null;
+  if (bizExploitPdfUrl.value) {
+    URL.revokeObjectURL(bizExploitPdfUrl.value);
+    bizExploitPdfUrl.value = null;
+  }
+}
+
 const bizData = ref<any[]>([]);
 const bizDataLoading = ref(false);
 const bizCollapsed = ref(new Set<string>());
@@ -575,7 +609,12 @@ async function loadBizVulnList() {
 }
 
 watch(activeStep, (step) => {
-  if (step === 'biz_surface' || step === 'biz' || step === 'biz_vuln_list') {
+  if (
+    step === 'biz_surface' ||
+    step === 'biz' ||
+    step === 'biz_vuln_list' ||
+    step === 'biz_exploit'
+  ) {
     loadBizData();
   }
   if (step === 'biz') {
@@ -586,6 +625,9 @@ watch(activeStep, (step) => {
     showBizModuleList.value = true;
     selectedBizName.value = null;
     bizVulnExploitList.value = [];
+  }
+  if (step === 'biz_exploit') {
+    backBizExploitToModuleList();
   }
 });
 
@@ -1158,6 +1200,107 @@ onUnmounted(() => {
                     <span class="font-medium">证据:</span> {{ vuln.evidence }}
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-else-if="activeStep === 'biz_exploit'"
+            class="flex h-full w-full flex-1 flex-col"
+          >
+            <div v-if="showBizExploitModuleList" class="flex h-full flex-col overflow-y-auto p-4">
+              <div class="mb-3 text-sm font-medium text-gray-700">
+                选择业务模块查看漏洞利用报告
+              </div>
+              <div v-if="bizDataLoading" class="flex items-center justify-center py-8 text-sm text-gray-400">
+                加载业务数据中...
+              </div>
+              <div v-else-if="bizData.length === 0" class="flex items-center justify-center py-8 text-sm text-gray-400">
+                暂无业务数据
+              </div>
+              <div v-else class="space-y-4">
+                <template v-for="(group, gIdx) in bizData" :key="gIdx">
+                  <div
+                    v-for="(modules, category) in group"
+                    :key="category"
+                    class="rounded border border-gray-200 bg-white shadow-sm"
+                  >
+                    <div
+                      class="flex cursor-pointer items-center justify-between px-4 py-3 select-none"
+                      @click="toggleBizCollapse(gIdx + '-' + category)"
+                    >
+                      <div class="text-sm font-medium text-gray-700 capitalize">
+                        {{ String(category).replace(/_/g, ' ') }}
+                        <span class="ml-2 text-xs font-normal text-gray-400"
+                          >({{ modules.length }})</span
+                        >
+                      </div>
+                      <span
+                        class="text-xs text-gray-400 transition-transform duration-200"
+                        :class="{
+                          'rotate-90': !bizCollapsed.has(gIdx + '-' + category),
+                        }"
+                      >
+                        ▸
+                      </span>
+                    </div>
+                    <div
+                      v-if="!bizCollapsed.has(gIdx + '-' + category)"
+                      class="space-y-2 border-t border-gray-100 px-4 py-3"
+                    >
+                      <div
+                        v-for="(item, idx) in modules"
+                        :key="idx"
+                        class="cursor-pointer rounded p-2 text-xs transition-colors hover:text-blue-600"
+                        :class="
+                          bizVulnResSet.has(item.module_name)
+                            ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                            : 'bg-gray-50 text-gray-600 hover:bg-blue-50'
+                        "
+                        @click="loadBizExploitPdf(item.module_name)"
+                      >
+                        <div class="font-medium">{{ item.module_name }}</div>
+                        <div
+                          v-if="item.module_path"
+                          class="mt-1 font-mono text-gray-400"
+                        >
+                          {{ item.module_path }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+            <div v-else class="flex h-full flex-col">
+              <div class="flex items-center gap-2 border-b bg-gray-50 px-4 py-2">
+                <button
+                  class="rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50"
+                  @click="backBizExploitToModuleList"
+                >
+                  ← 返回模块列表
+                </button>
+                <span class="text-xs font-medium text-gray-600">
+                  {{ selectedBizExploitName }} - 漏洞利用报告
+                </span>
+              </div>
+              <div
+                v-if="bizExploitPdfLoading"
+                class="flex flex-1 items-center justify-center text-sm text-gray-400"
+              >
+                加载报告中...
+              </div>
+              <iframe
+                v-else-if="bizExploitPdfUrl"
+                :src="bizExploitPdfUrl"
+                class="h-full w-full rounded border-0"
+                style="min-height: 500px"
+              ></iframe>
+              <div
+                v-else
+                class="flex flex-1 items-center justify-center text-sm text-gray-400"
+              >
+                暂无报告
               </div>
             </div>
           </div>

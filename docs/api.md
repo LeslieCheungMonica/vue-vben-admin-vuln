@@ -563,3 +563,21 @@ curl -X POST http://127.0.0.1:7654/wape/biz_vuln_exploit_list \
 open http://127.0.0.1:7654/wape/biz_report_pdf/wape-20250516010101/ETL作业管理-作业画布
 ```
 ```
+
+---
+
+## 19. 业务漏洞利用报告 PDF 预览
+
+**GET** `/wape/biz_exploit_report_pdf/{task_id}/{biz_name)`
+
+查看指定业务模块的漏洞利用报告 PDF。
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| task_id | path | 是 | 任务 ID |
+| biz_name | path | 是 | 业务模块名称 |
+
+```bash
+# 浏览器直接打开
+open http://127.0.0.1:7654/wape/biz_exploit_report_pdf/wape-20250516010101/ETL作业管理-作业画布
+```
