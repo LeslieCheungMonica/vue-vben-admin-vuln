@@ -2,16 +2,8 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef } from 'vue';
 import { useRoute } from 'vue-router';
 import { Page } from '@vben/common-ui';
-import { Descriptions, message, Tag } from 'ant-design-vue';
+import { Descriptions, message, Tag, Tree } from 'ant-design-vue';
 import { getCosmicTaskDetailApi, type CosmicApi } from '#/api/core/cosmic';
-
-interface FlatNode {
-  name: string;
-  depth: number;
-  path: string;
-  evidence: CosmicApi.Evidence | undefined;
-  hasChildren: boolean;
-}
 
 interface PartState {
   id: string;
@@ -29,53 +21,47 @@ interface PartState {
   updatedAt: number;
 }
 
+interface AntTreeNode {
+  key: string;
+  title: string;
+  children?: AntTreeNode[];
+  isLeaf: boolean;
+  evidence?: CosmicApi.Evidence;
+  status: 'exists' | 'not-exists' | 'pending' | 'module';
+}
+
 const route = useRoute();
 const taskId = route.params.taskId as string;
 
 const loading = ref(false);
 const treeData = ref<CosmicApi.TaskDetailNode | null>(null);
-const flatNodes = ref<FlatNode[]>([]);
+const antTreeData = ref<AntTreeNode[]>([]);
 const selectedEvidence = ref<CosmicApi.Evidence | null>(null);
-const expandedPaths = ref<Set<string>>(new Set());
+const expandedKeys = ref<string[]>([]);
+const selectedKeys = ref<string[]>([]);
 
-function flattenTree(node: CosmicApi.TaskDetailNode, depth: number, path: string): FlatNode[] {
+// Convert API tree to Ant Tree format
+function toAntTree(node: CosmicApi.TaskDetailNode, path: string): AntTreeNode {
   const currentPath = path ? `${path}-${node.name}` : node.name;
-  const hasChildren = node.children && node.children.length > 0;
-  const result: FlatNode[] = [];
+  const isLeaf = !node.children || node.children.length === 0;
 
-  result.push({
-    name: node.name,
-    depth,
-    path: currentPath,
-    evidence: node.evidence,
-    hasChildren,
-  });
-
-  if (hasChildren && expandedPaths.value.has(currentPath)) {
-    for (const child of node.children!) {
-      result.push(...flattenTree(child, depth + 1, currentPath));
+  let status: AntTreeNode['status'] = 'module';
+  if (isLeaf) {
+    if (node.evidence) {
+      status = node.evidence.exists ? 'exists' : 'not-exists';
+    } else {
+      status = 'pending';
     }
   }
 
-  return result;
-}
-
-function rebuildFlatList() {
-  if (!treeData.value) {
-    flatNodes.value = [];
-    return;
-  }
-  flatNodes.value = flattenTree(treeData.value, 0, '');
-}
-
-function toggleExpand(path: string) {
-  if (expandedPaths.value.has(path)) {
-    expandedPaths.value.delete(path);
-  } else {
-    expandedPaths.value.add(path);
-  }
-  expandedPaths.value = new Set(expandedPaths.value);
-  rebuildFlatList();
+  return {
+    key: currentPath,
+    title: node.name,
+    isLeaf,
+    evidence: node.evidence,
+    status,
+    children: node.children ? node.children.map((c) => toAntTree(c, currentPath)) : undefined,
+  };
 }
 
 const leftWidth = ref(70);
@@ -106,11 +92,12 @@ async function fetchDetail() {
         name: 'COSMIC 功能判定',
         children: res.tree,
       };
-      expandedPaths.value.add(treeData.value.name);
+      antTreeData.value = treeData.value.children.map((c) => toAntTree(c, treeData.value!.name));
+      expandedKeys.value = [treeData.value.name];
     } else {
       treeData.value = null;
+      antTreeData.value = [];
     }
-    rebuildFlatList();
   } catch {
     message.error('获取任务详情失败');
     treeData.value = null;
@@ -119,8 +106,12 @@ async function fetchDetail() {
   }
 }
 
-function selectEvidence(evidence: CosmicApi.Evidence | undefined) {
-  if (evidence) selectedEvidence.value = evidence;
+function handleSelect(keys: string[], info: any) {
+  selectedKeys.value = keys;
+  const node = info.node as AntTreeNode;
+  if (node.isLeaf && node.evidence) {
+    selectedEvidence.value = node.evidence;
+  }
 }
 
 function countLeafNodes(node: CosmicApi.TaskDetailNode): number {
@@ -129,23 +120,17 @@ function countLeafNodes(node: CosmicApi.TaskDetailNode): number {
 }
 
 function countExists(node: CosmicApi.TaskDetailNode): number {
-  if (!node.children || node.children.length === 0) {
-    return node.evidence?.exists ? 1 : 0;
-  }
+  if (!node.children || node.children.length === 0) return node.evidence?.exists ? 1 : 0;
   return node.children.reduce((sum, c) => sum + countExists(c), 0);
 }
 
 function countNotExists(node: CosmicApi.TaskDetailNode): number {
-  if (!node.children || node.children.length === 0) {
-    return node.evidence && !node.evidence.exists ? 1 : 0;
-  }
+  if (!node.children || node.children.length === 0) return node.evidence && !node.evidence.exists ? 1 : 0;
   return node.children.reduce((sum, c) => sum + countNotExists(c), 0);
 }
 
 function countPending(node: CosmicApi.TaskDetailNode): number {
-  if (!node.children || node.children.length === 0) {
-    return !node.evidence ? 1 : 0;
-  }
+  if (!node.children || node.children.length === 0) return !node.evidence ? 1 : 0;
   return node.children.reduce((sum, c) => sum + countPending(c), 0);
 }
 
@@ -155,12 +140,8 @@ const FLUSH_INTERVAL = 150;
 const displayItems = shallowRef<PartState[]>([]);
 
 const mergedDisplayItems = computed(() => {
-  const result: (
-    | { type: 'merged-reasoning'; texts: string[]; ids: string[] }
-    | PartState
-  )[] = [];
+  const result: ({ type: 'merged-reasoning'; texts: string[]; ids: string[] } | PartState)[] = [];
   let current: { type: 'merged-reasoning'; texts: string[]; ids: string[] } | null = null;
-
   for (const item of displayItems.value) {
     if (item.type === 'reasoning') {
       if (current) {
@@ -196,9 +177,7 @@ function getOrCreatePart(id: string, sessionId: string, type: PartState['type'])
 
 function flushDirtyParts() {
   if (dirtyParts.size === 0) return;
-  const items = Array.from(partsMap.values())
-    .filter((p) => !p.hidden)
-    .sort((a, b) => a.updatedAt - b.updatedAt);
+  const items = Array.from(partsMap.values()).filter((p) => !p.hidden).sort((a, b) => a.updatedAt - b.updatedAt);
   displayItems.value = items;
   dirtyParts.clear();
   nextTick(() => {
@@ -211,7 +190,6 @@ function flushDirtyParts() {
 function processEvent(data: any) {
   const type: string = data.type;
   const props = data.properties || {};
-
   if (type === 'message.part.delta' && props.field === 'text') {
     const partId = props.partID;
     if (!partId) return;
@@ -223,15 +201,12 @@ function processEvent(data: any) {
     dirtyParts.add(partId);
     return;
   }
-
   if (type === 'message.part.updated') {
     const partData = props.part || {};
     const partId = partData.id || props.partID;
     if (!partId) return;
-
     const partType: string = partData.type || '';
     const part = getOrCreatePart(partId, props.sessionID, partType as any);
-
     if (partType === 'reasoning') {
       part.text = partData.text || part.text;
     } else if (partType === 'tool') {
@@ -242,23 +217,19 @@ function processEvent(data: any) {
       part.toolInput = partData.input || partData.toolInput;
       part.toolOutput = partData.output || partData.toolOutput;
     }
-
     if (partData.status === 'completed' || partData.state === 'completed') {
       part.toolStatus = 'completed';
     }
-
     part.updatedAt = Date.now();
     dirtyParts.add(partId);
     return;
   }
-
   if (type === 'message.part.created') {
     const partData = props.part || {};
     const partId = partData.id || props.partID;
     if (!partId) return;
     const partType: string = partData.type || '';
     const part = getOrCreatePart(partId, props.sessionID, partType as any);
-
     if (partType === 'tool') {
       part.type = 'tool';
       part.toolName = partData.toolName || partData.tool;
@@ -269,7 +240,6 @@ function processEvent(data: any) {
     dirtyParts.add(partId);
     return;
   }
-
   if (type === 'step' && props.step) {
     const stepPartId = `step-${props.step.type}-${props.step.name || Date.now()}`;
     const part = getOrCreatePart(stepPartId, '', 'step');
@@ -283,30 +253,20 @@ function processEvent(data: any) {
 function connectEventStream() {
   const url = `/api/wape/event_stream/${taskId}`;
   eventSource = new EventSource(url);
-  eventSource.onopen = () => {
-    eventStreamConnected.value = true;
-  };
+  eventSource.onopen = () => { eventStreamConnected.value = true; };
   eventSource.onmessage = (e) => {
     try {
       const data = JSON.parse(e.data);
       processEvent(data);
-    } catch {
-      // ignore parse errors
-    }
+    } catch { /* ignore */ }
   };
   eventSource.onerror = () => {
     eventStreamConnected.value = false;
-    if (eventSource) {
-      eventSource.close();
-    }
+    if (eventSource) eventSource.close();
   };
 }
 
-const toolStatusIcon: Record<string, string> = {
-  running: '\u{1F504}',
-  completed: '\u2705',
-  pending: '\u23F3',
-};
+const toolStatusIcon: Record<string, string> = { running: '🔄', completed: '✅', pending: '⏳' };
 
 onMounted(() => {
   fetchDetail();
@@ -315,27 +275,20 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  if (eventSource) {
-    eventSource.close();
-  }
-  if (flushTimer) {
-    clearInterval(flushTimer);
-  }
+  if (eventSource) eventSource.close();
+  if (flushTimer) clearInterval(flushTimer);
 });
 </script>
 
 <template>
-  <Page
-    :description="`任务 ${taskId} 的判定详情与思考流程`"
-    title="Cosmic 任务详情"
-  >
+  <Page :description="`任务 ${taskId} 的判定详情与思考流程`" title="Cosmic 任务详情">
     <div class="flex gap-0">
-      <!-- Left panel: tree -->
+<!-- Left panel: tree -->
       <div
-        class="flex flex-col rounded border transition-all duration-300 overflow-hidden"
+        class="flex flex-col rounded border transition-all duration-300 overflow-hidden relative"
         :style="leftPanelStyle"
       >
-        <div class="flex items-center gap-2 border-b bg-gray-50 px-4 py-3 text-sm font-medium">
+        <div class="flex items-center gap-2 border-b bg-gray-50 px-4 py-3 text-sm font-medium shrink-0">
           <span>📋 功能存在性判定</span>
           <Tag v-if="treeData" color="blue">{{ countLeafNodes(treeData) }} 项</Tag>
           <Tag v-if="treeData" color="green">{{ countExists(treeData) }} 已实现</Tag>
@@ -343,59 +296,44 @@ onUnmounted(() => {
           <Tag v-if="treeData" color="orange">{{ countPending(treeData) }} 待判定</Tag>
         </div>
         <div class="flex-1 overflow-auto p-4" style="min-height: 500px">
-          <div v-if="loading" class="flex items-center justify-center py-20 text-gray-400">
-            加载中...
-          </div>
-          <div
-            v-else-if="!treeData"
-            class="flex items-center justify-center py-20 text-gray-400"
+          <div v-if="loading" class="flex items-center justify-center py-20 text-gray-400">加载中...</div>
+          <div v-else-if="!treeData" class="flex items-center justify-center py-20 text-gray-400">暂无判定数据</div>
+          <Tree
+            v-else
+            :tree-data="antTreeData"
+            :expanded-keys="expandedKeys"
+            :selected-keys="selectedKeys"
+            show-line
+            class="cosmic-tree"
+            block-node
+            @expand="expandedKeys = $event"
+            @select="handleSelect"
           >
-            暂无判定数据
-          </div>
-          <div v-else class="space-y-1">
-            <div
-              v-for="node in flatNodes"
-              :key="node.path"
-            >
-              <div
-                class="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all hover:bg-gray-100"
-                :class="{
-                  'bg-blue-50 ring-1 ring-blue-200': selectedEvidence === node.evidence && !node.hasChildren
-                }"
-                :style="{ marginLeft: `${node.depth * 20}px` }"
-                @click="node.hasChildren ? toggleExpand(node.path) : selectEvidence(node.evidence)"
-              >
-                <span v-if="node.hasChildren" class="w-4 text-center text-xs text-gray-400 shrink-0">
-                  {{ expandedPaths.has(node.path) ? '\u25BC' : '\u25B6' }}
-                </span>
-                <span v-else class="w-4 shrink-0"></span>
-
+            <template #title="{ key: treeKey, title, isLeaf, status, evidence }">
+              <div class="flex items-center gap-2 py-0.5">
+                <span v-if="!isLeaf" class="text-base shrink-0">📁</span>
+                <span v-else class="text-base shrink-0">📄</span>
                 <span
-                  v-if="node.evidence"
-                  class="inline-block h-2 w-2 shrink-0 rounded-full"
-                  :class="node.evidence.exists ? 'bg-green-500' : 'bg-red-400'"
+                  v-if="status === 'exists'"
+                  class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-green-500 ring-1 ring-green-200"
                 />
                 <span
-                  v-else-if="node.hasChildren"
-                  class="inline-block h-2 w-2 shrink-0 rounded-full bg-gray-300"
+                  v-else-if="status === 'not-exists'"
+                  class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-red-400 ring-1 ring-red-200"
                 />
                 <span
-                  v-else
-                  class="inline-block h-2 w-2 shrink-0 rounded-full bg-yellow-300"
+                  v-else-if="status === 'pending'"
+                  class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-yellow-400 ring-1 ring-yellow-200"
                 />
-
-                <span class="flex-1 truncate font-medium text-gray-700">{{ node.name }}</span>
-
-                <Tag
-                  v-if="!node.hasChildren && node.evidence"
-                  :color="node.evidence.exists ? 'success' : 'error'"
-                  class="shrink-0"
-                >
-                  {{ node.evidence.exists ? '\u5DF2\u5B9E\u73B0' : '\u672A\u5B9E\u73B0' }}
+                <span v-else class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-gray-300" />
+                <span class="flex-1 truncate text-sm" :class="{ 'font-medium': !isLeaf }">{{ title }}</span>
+                <Tag v-if="isLeaf && evidence" :color="evidence.exists ? 'success' : 'error'" class="shrink-0 !text-xs !px-1.5">
+                  {{ evidence.exists ? '已实现' : '未实现' }}
                 </Tag>
+                <Tag v-else-if="isLeaf && !evidence" color="default" class="shrink-0 !text-xs !px-1.5">待判定</Tag>
               </div>
-            </div>
-          </div>
+            </template>
+          </Tree>
         </div>
       </div>
 
@@ -403,92 +341,93 @@ onUnmounted(() => {
       <div
         v-if="selectedEvidence"
         class="flex flex-col rounded border transition-all duration-300 overflow-hidden"
-        :style="{ width: '0', minWidth: '380px', marginLeft: '8px' }"
+        :style="{ width: '0', minWidth: '420px', marginLeft: '8px' }"
       >
-        <div class="flex items-center justify-between border-b bg-gray-50 px-4 py-3 text-sm font-medium">
-          <span>📎 判定详情</span>
-          <span
-            class="cursor-pointer text-xs text-gray-400 hover:text-gray-600"
-            @click="selectedEvidence = null"
-          >✕</span>
+        <!-- Header -->
+        <div class="flex items-center justify-between border-b bg-gradient-to-r from-blue-50 to-white px-4 py-3">
+          <div class="flex items-center gap-2">
+            <span class="text-base">🔍</span>
+            <span class="text-sm font-medium text-gray-700">判定详情</span>
+          </div>
+          <span class="cursor-pointer text-lg leading-none text-gray-300 hover:text-gray-500 transition-colors" @click="selectedEvidence = null">×</span>
         </div>
-        <div class="flex-1 overflow-auto p-4 text-sm">
-          <Descriptions :column="1" border size="small">
-            <Descriptions.Item label="功能路径">
-              <code class="break-all text-xs">{{ selectedEvidence.input_path }}</code>
-            </Descriptions.Item>
-            <Descriptions.Item label="是否存在">
-              <Tag :color="selectedEvidence.exists ? 'success' : 'error'">
-                {{ selectedEvidence.exists ? '\u662F' : '\u5426' }}
-              </Tag>
-            </Descriptions.Item>
-            <Descriptions.Item label="判定理由">
-              <pre class="whitespace-pre-wrap break-all rounded bg-gray-100 p-2 text-xs">{{ selectedEvidence.reason }}</pre>
-            </Descriptions.Item>
-          </Descriptions>
 
-          <div v-if="selectedEvidence.details?.frontend" class="mt-4">
-            <div class="mb-2 text-xs font-medium text-gray-500">前端分析</div>
-            <Descriptions :column="1" border size="small">
-              <Descriptions.Item label="是否存在">
-                <Tag :color="selectedEvidence.details.frontend.exists ? 'success' : 'error'">
-                  {{ selectedEvidence.details.frontend.exists ? '\u662F' : '\u5426' }}
-                </Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="分析理由">
-                <pre class="whitespace-pre-wrap break-all rounded bg-gray-100 p-2 text-xs">{{ selectedEvidence.details.frontend.reason }}</pre>
-              </Descriptions.Item>
-              <Descriptions.Item v-if="selectedEvidence.details.frontend.searched_keywords" label="搜索关键词">
-                <div class="flex flex-wrap gap-1">
-                  <Tag v-for="kw in selectedEvidence.details.frontend.searched_keywords" :key="kw">
-                    {{ kw }}
-                  </Tag>
-                </div>
-              </Descriptions.Item>
-              <Descriptions.Item v-if="selectedEvidence.details.frontend.searched_paths" label="搜索路径">
-                <div class="space-y-1">
-                  <div
-                    v-for="p in selectedEvidence.details.frontend.searched_paths"
-                    :key="p"
-                    class="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600"
-                  >
-                    <code>{{ p }}</code>
-                  </div>
-                </div>
-              </Descriptions.Item>
-            </Descriptions>
+        <div class="flex-1 overflow-auto p-4 space-y-4" style="min-height: 300px">
+          <!-- Summary card -->
+          <div class="rounded-lg border p-4" :class="selectedEvidence.exists ? 'border-green-200 bg-green-50/40' : 'border-red-200 bg-red-50/40'">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <span class="text-lg">{{ selectedEvidence.exists ? '✅' : '❌' }}</span>
+                <span class="text-sm font-semibold" :class="selectedEvidence.exists ? 'text-green-700' : 'text-red-700'">
+                  {{ selectedEvidence.exists ? '功能已实现' : '功能未实现' }}
+                </span>
+              </div>
+              <Tag :color="selectedEvidence.exists ? 'success' : 'error'">{{ selectedEvidence.exists ? '是' : '否' }}</Tag>
+            </div>
+            <div class="space-y-2 text-sm">
+              <div class="flex items-start gap-2">
+                <span class="shrink-0 mt-0.5 text-gray-400">📁</span>
+                <code class="break-all rounded bg-gray-100/80 px-2 py-0.5 text-xs text-gray-600">{{ selectedEvidence.input_path }}</code>
+              </div>
+              <div class="flex items-start gap-2">
+                <span class="shrink-0 mt-0.5 text-gray-400">💬</span>
+                <p class="text-gray-600 leading-relaxed">{{ selectedEvidence.reason }}</p>
+              </div>
+            </div>
           </div>
 
-          <div v-if="selectedEvidence.details?.backend" class="mt-4">
-            <div class="mb-2 text-xs font-medium text-gray-500">后端分析</div>
-            <Descriptions :column="1" border size="small">
-              <Descriptions.Item label="是否存在">
-                <Tag :color="selectedEvidence.details.backend.exists ? 'success' : 'error'">
-                  {{ selectedEvidence.details.backend.exists ? '\u662F' : '\u5426' }}
-                </Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="分析理由">
-                <pre class="whitespace-pre-wrap break-all rounded bg-gray-100 p-2 text-xs">{{ selectedEvidence.details.backend.reason }}</pre>
-              </Descriptions.Item>
-              <Descriptions.Item v-if="selectedEvidence.details.backend.searched_keywords" label="搜索关键词">
-                <div class="flex flex-wrap gap-1">
-                  <Tag v-for="kw in selectedEvidence.details.backend.searched_keywords" :key="kw">
-                    {{ kw }}
-                  </Tag>
+          <!-- Frontend analysis -->
+          <div v-if="selectedEvidence.details?.frontend" class="rounded-lg border border-gray-200 overflow-hidden">
+            <div class="flex items-center gap-2 bg-gray-50 px-4 py-2.5 border-b border-gray-200">
+              <span>🖥️</span>
+              <span class="text-sm font-medium text-gray-700">前端分析</span>
+              <Tag :color="selectedEvidence.details.frontend.exists ? 'success' : 'error'" class="ml-auto">{{ selectedEvidence.details.frontend.exists ? '已找到' : '未找到' }}</Tag>
+            </div>
+            <div class="p-4 space-y-3">
+              <div>
+                <div class="text-xs text-gray-400 mb-1">分析理由</div>
+                <p class="text-sm text-gray-600 leading-relaxed">{{ selectedEvidence.details.frontend.reason }}</p>
+              </div>
+              <div v-if="selectedEvidence.details.frontend.searched_keywords">
+                <div class="text-xs text-gray-400 mb-1.5">搜索关键词</div>
+                <div class="flex flex-wrap gap-1.5">
+                  <span v-for="kw in selectedEvidence.details.frontend.searched_keywords" :key="kw" class="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-600 font-mono">{{ kw }}</span>
                 </div>
-              </Descriptions.Item>
-              <Descriptions.Item v-if="selectedEvidence.details.backend.searched_paths" label="搜索路径">
+              </div>
+              <div v-if="selectedEvidence.details.frontend.searched_paths">
+                <div class="text-xs text-gray-400 mb-1.5">搜索路径</div>
                 <div class="space-y-1">
-                  <div
-                    v-for="p in selectedEvidence.details.backend.searched_paths"
-                    :key="p"
-                    class="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600"
-                  >
-                    <code>{{ p }}</code>
-                  </div>
+                  <div v-for="p in selectedEvidence.details.frontend.searched_paths" :key="p" class="rounded bg-gray-100 px-2.5 py-1.5 text-xs text-gray-500 font-mono leading-relaxed">{{ p }}</div>
                 </div>
-              </Descriptions.Item>
-            </Descriptions>
+              </div>
+            </div>
+          </div>
+
+          <!-- Backend analysis -->
+          <div v-if="selectedEvidence.details?.backend" class="rounded-lg border border-gray-200 overflow-hidden">
+            <div class="flex items-center gap-2 bg-gray-50 px-4 py-2.5 border-b border-gray-200">
+              <span>⚙️</span>
+              <span class="text-sm font-medium text-gray-700">后端分析</span>
+              <Tag :color="selectedEvidence.details.backend.exists ? 'success' : 'error'" class="ml-auto">{{ selectedEvidence.details.backend.exists ? '已找到' : '未找到' }}</Tag>
+            </div>
+            <div class="p-4 space-y-3">
+              <div>
+                <div class="text-xs text-gray-400 mb-1">分析理由</div>
+                <p class="text-sm text-gray-600 leading-relaxed">{{ selectedEvidence.details.backend.reason }}</p>
+              </div>
+              <div v-if="selectedEvidence.details.backend.searched_keywords">
+                <div class="text-xs text-gray-400 mb-1.5">搜索关键词</div>
+                <div class="flex flex-wrap gap-1.5">
+                  <span v-for="kw in selectedEvidence.details.backend.searched_keywords" :key="kw" class="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-600 font-mono">{{ kw }}</span>
+                </div>
+              </div>
+              <div v-if="selectedEvidence.details.backend.searched_paths">
+                <div class="text-xs text-gray-400 mb-1.5">搜索路径</div>
+                <div class="space-y-1">
+                  <div v-for="p in selectedEvidence.details.backend.searched_paths" :key="p" class="rounded bg-gray-100 px-2.5 py-1.5 text-xs text-gray-500 font-mono leading-relaxed">{{ p }}</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -497,106 +436,52 @@ onUnmounted(() => {
       <div class="relative flex flex-col" :style="{ width: '0' }">
         <div
           class="absolute -left-3 top-8 z-20 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-gray-200 bg-white text-xs text-gray-400 shadow-sm transition-all hover:border-blue-300 hover:text-blue-500 hover:shadow-md"
-          :title="rightCollapsed ? '\u5C55\u5F00\u601D\u8003\u6D41\u7A0B' : '\u6536\u8D77\u601D\u8003\u6D41\u7A0B'"
+          :title="rightCollapsed ? '展开思考流程' : '收起思考流程'"
           @click="toggleRight"
         >
-          <span class="select-none leading-none text-[10px]">
-            {{ rightCollapsed ? '\u25C0' : '\u25B6' }}
-          </span>
+          <span class="select-none leading-none text-[10px]">{{ rightCollapsed ? '◀' : '▶' }}</span>
         </div>
       </div>
 
       <!-- Right panel: thinking flow -->
-      <div
-        class="flex flex-col rounded border transition-all duration-300 overflow-hidden"
-        :style="rightPanelStyle"
-      >
-        <div
-          class="flex items-center gap-2 border-b bg-gray-50 px-4 py-3 text-sm font-medium"
-        >
+      <div class="flex flex-col rounded border transition-all duration-300 overflow-hidden" :style="rightPanelStyle">
+        <div class="flex items-center gap-2 border-b bg-gray-50 px-4 py-3 text-sm font-medium">
           <span>🤖 思考流程</span>
-          <span
-            class="inline-block h-2 w-2 rounded-full"
-            :style="{
-              backgroundColor: eventStreamConnected ? '#52c41a' : '#d9d9d9',
-            }"
-          ></span>
-          <span class="text-xs text-gray-400">
-            {{ eventStreamConnected ? '\u5DF2\u8FDE\u63A5' : '\u672A\u8FDE\u63A5' }}
-          </span>
+          <span class="inline-block h-2 w-2 rounded-full" :style="{ backgroundColor: eventStreamConnected ? '#52c41a' : '#d9d9d9' }"></span>
+          <span class="text-xs text-gray-400">{{ eventStreamConnected ? '已连接' : '未连接' }}</span>
         </div>
-        <div
-          ref="eventStreamContainer"
-          class="flex-1 overflow-y-auto p-4"
-          style="min-height: 400px; max-height: 540px"
-        >
+        <div ref="eventStreamContainer" class="flex-1 overflow-y-auto p-4" style="min-height: 400px; max-height: 540px">
           <template v-if="mergedDisplayItems.length === 0">
             <div class="pt-16 text-center text-gray-400">
               <div class="mb-2 text-3xl">⚡</div>
-              <div>
-                {{ eventStreamConnected ? '\u7B49\u5F85 AI \u601D\u8003...' : '\u6682\u65E0\u8FDE\u63A5' }}
-              </div>
+              <div>{{ eventStreamConnected ? '等待 AI 思考...' : '暂无连接' }}</div>
             </div>
           </template>
-
           <div class="space-y-3">
-            <div
-              v-for="item in mergedDisplayItems"
-              :key="item.type === 'merged-reasoning' ? item.ids[0] : item.id"
-              class="animate-fade-in"
-            >
-              <div
-                v-if="item.type === 'merged-reasoning'"
-                class="rounded-lg border border-blue-100 bg-blue-50/60 p-3"
-              >
+            <div v-for="item in mergedDisplayItems" :key="item.type === 'merged-reasoning' ? item.ids[0] : item.id" class="animate-fade-in">
+              <div v-if="item.type === 'merged-reasoning'" class="rounded-lg border border-blue-100 bg-blue-50/60 p-3">
                 <div class="mb-1.5 flex items-center gap-1.5 text-xs text-blue-400">
-                  <span>💭</span>
-                  <span>推理中</span>
-                  <span
-                    class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-blue-400"
-                  ></span>
+                  <span>💭</span><span>推理中</span>
+                  <span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-blue-400"></span>
                 </div>
-                <div
-                  class="whitespace-pre-wrap text-sm leading-relaxed text-gray-700 space-y-2"
-                >
+                <div class="whitespace-pre-wrap text-sm leading-relaxed text-gray-700 space-y-2">
                   <template v-for="(text, tIdx) in item.texts" :key="tIdx">
                     <div v-if="text.trim()" class="text-gray-700">{{ text }}</div>
                   </template>
-                  <span
-                    class="inline-block h-3.5 w-0.5 animate-pulse bg-blue-300 align-text-bottom"
-                  ></span>
+                  <span class="inline-block h-3.5 w-0.5 animate-pulse bg-blue-300 align-text-bottom"></span>
                 </div>
               </div>
-
-              <div
-                v-if="item.type === 'tool'"
-                class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm"
-              >
+              <div v-if="item.type === 'tool'" class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
                 <div class="mb-1.5 flex items-center gap-2">
-                  <span class="text-base">
-                    {{ toolStatusIcon[item.toolStatus || ''] || '🔧' }}
-                  </span>
-                  <span class="text-xs font-medium text-gray-500">
-                    {{ item.toolName || '\u5DE5\u5177\u8C03\u7528' }}
-                  </span>
-                  <Tag
-                    v-if="item.toolStatus"
-                    :color="item.toolStatus === 'completed' ? 'success' : item.toolStatus === 'running' ? 'processing' : 'default'"
-                  >
-                    {{ item.toolStatus }}
-                  </Tag>
+                  <span class="text-base">{{ toolStatusIcon[item.toolStatus || ''] || '🔧' }}</span>
+                  <span class="text-xs font-medium text-gray-500">{{ item.toolName || '工具调用' }}</span>
+                  <Tag v-if="item.toolStatus" :color="item.toolStatus === 'completed' ? 'success' : item.toolStatus === 'running' ? 'processing' : 'default'">{{ item.toolStatus }}</Tag>
                 </div>
-                <div
-                  v-if="item.toolInput"
-                  class="mb-1 rounded bg-gray-100 p-2 text-xs text-gray-500"
-                >
+                <div v-if="item.toolInput" class="mb-1 rounded bg-gray-100 p-2 text-xs text-gray-500">
                   <div class="mb-0.5 font-medium">输入:</div>
                   <pre class="whitespace-pre-wrap break-all">{{ item.toolInput }}</pre>
                 </div>
-                <div
-                  v-if="item.toolOutput && !item.hideContent"
-                  class="rounded bg-gray-50 p-2 text-xs text-gray-500"
-                >
+                <div v-if="item.toolOutput && !item.hideContent" class="rounded bg-gray-50 p-2 text-xs text-gray-500">
                   <div class="mb-0.5 font-medium">输出:</div>
                   <pre class="whitespace-pre-wrap break-all">{{ item.toolOutput }}</pre>
                 </div>
@@ -608,3 +493,24 @@ onUnmounted(() => {
     </div>
   </Page>
 </template>
+
+<style scoped>
+.cosmic-tree :deep(.ant-tree-treenode) {
+  padding: 2px 0;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.cosmic-tree :deep(.ant-tree-treenode:last-child) {
+  border-bottom: none;
+}
+
+.cosmic-tree :deep(.ant-tree-treenode:hover) {
+  background-color: #e6f4ff;
+}
+
+.cosmic-tree :deep(.ant-tree-node-content-wrapper) {
+  background: transparent !important;
+}
+</style>
