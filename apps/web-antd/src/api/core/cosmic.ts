@@ -1,0 +1,144 @@
+import { baseRequestClient } from '#/api/request';
+
+interface ApiResponse<T> {
+  data: T;
+}
+
+export namespace CosmicApi {
+  export interface ResourceItem {
+    id: number;
+    file_name: string;
+    real_file_name: string;
+    file_path: string;
+    file_size: number;
+    description: string;
+    created_at: string;
+  }
+
+  export interface ResourceListResult {
+    status: string;
+    items: ResourceItem[];
+  }
+
+  export interface ResourceUploadResult {
+    status: string;
+    file_path: string;
+    file_name: string;
+    message: string;
+  }
+
+  export interface ResourceDeleteResult {
+    status: string;
+    message: string;
+  }
+
+  export interface TaskItem {
+    id: number;
+    task_id: string;
+    task_name: string;
+    code_resource_id: number;
+    cosmic_resource_id: number;
+    status: string;
+    created_at: string;
+  }
+
+  export interface TaskListResult {
+    status: string;
+    items: TaskItem[];
+    message: string;
+  }
+
+  export interface TaskCreateResult {
+    status: string;
+    task_id: string;
+    task_name: string;
+    message: string;
+  }
+
+  export interface TaskActionResult {
+    status: string;
+    message: string;
+  }
+}
+
+export async function getCosmicResourceListApi() {
+  const { data } = await baseRequestClient.post<
+    ApiResponse<CosmicApi.ResourceListResult>
+  >('/cosmic/resource_list');
+  return data;
+}
+
+export async function uploadCosmicResourceApi(formData: FormData) {
+  const { data } = await baseRequestClient.post<
+    ApiResponse<CosmicApi.ResourceUploadResult>
+  >('/cosmic/resource_upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
+
+export async function deleteCosmicResourceApi(id: number) {
+  const { data } = await baseRequestClient.post<
+    ApiResponse<CosmicApi.ResourceDeleteResult>
+  >('/cosmic/resource_delete', { id });
+  return data;
+}
+
+export async function getCosmicTaskListApi() {
+  const { data } = await baseRequestClient.post<
+    ApiResponse<CosmicApi.TaskListResult>
+  >('/cosmic/task_list');
+  return data;
+}
+
+export async function createCosmicTaskApi(params: {
+  code_resource_id: number;
+  cosmic_resource_id: number;
+  task_name: string;
+}) {
+  const { data } = await baseRequestClient.post<
+    ApiResponse<CosmicApi.TaskCreateResult>
+  >('/cosmic/task_create', params);
+  return data;
+}
+
+export async function startCosmicTaskApi(taskId: string) {
+  const { data } = await baseRequestClient.post<
+    ApiResponse<CosmicApi.TaskActionResult>
+  >('/cosmic/task_start', { task_id: taskId });
+  return data;
+}
+
+export async function stopCosmicTaskApi(taskId: string) {
+  const { data } = await baseRequestClient.post<
+    ApiResponse<CosmicApi.TaskActionResult>
+  >('/cosmic/task_stop', { task_id: taskId });
+  return data;
+}
+
+export async function deleteCosmicTaskApi(taskId: string) {
+  const { data } = await baseRequestClient.post<
+    ApiResponse<CosmicApi.TaskActionResult>
+  >('/cosmic/task_delete', { task_id: taskId });
+  return data;
+}
+
+export async function updateCosmicTaskApi(params: {
+  task_id: string;
+  task_name?: string;
+  code_resource_id?: number;
+  cosmic_resource_id?: number;
+}) {
+  const { data } = await baseRequestClient.post<
+    ApiResponse<CosmicApi.TaskCreateResult>
+  >('/cosmic/task_update', params);
+  return data;
+}
+
+export async function exportCosmicReportApi(taskId: string) {
+  return baseRequestClient.post<Blob>(
+    '/cosmic/report_excel',
+    { task_id: taskId },
+    { responseType: 'blob' },
+  );
+}

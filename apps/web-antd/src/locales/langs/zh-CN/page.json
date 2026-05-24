@@ -11,5 +11,10 @@
     "title": "工作台",
     "analytics": "资源管理",
     "workspace": "任务管理"
+  },
+  "cosmic": {
+    "title": "Cosmic 工作台",
+    "docs": "文档管理",
+    "tasks": "任务管理"
   }
 }
