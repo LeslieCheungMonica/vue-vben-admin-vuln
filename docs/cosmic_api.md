@@ -278,7 +278,92 @@ POST /cosmic/task_start
 
 ---
 
-## 10. 报告导出（带颜色标记）
+## 10. 任务详情
+
+查询 COSMIC 判定任务的详细结果，按 **一级模块 → 二级模块 → 三级模块 → 功能过程** 组织为树结构返回。
+
+```
+POST /cosmic/task_detail
+```
+
+**请求：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|:-----|:-----|:-----|:-----|
+| `task_id` | str | 是 | 任务 ID |
+
+```json
+{
+  "task_id": "cosmic-20260524120000"
+}
+```
+
+**响应：**
+```json
+{
+  "status": "completed",
+  "total": 421,
+  "tree": [
+    {
+      "name": "安全数据预处理",
+      "children": [
+        {
+          "name": "数据解析",
+          "children": [
+            {
+              "name": "解析规则",
+              "children": [
+                {
+                  "name": "设备厂商目录编辑",
+                  "evidence": {
+                    "input_path": "安全数据预处理-数据解析-解析规则-设备厂商目录编辑",
+                    "exists": false,
+                    "reason": "前后端均未找到，功能未实现",
+                    "details": {
+                      "frontend": {
+                        "exists": false,
+                        "reason": "未找到对应前端组件或页面",
+                        "searched_keywords": ["vendor", "device", "厂商", "编辑"],
+                        "searched_paths": ["src/view/dataPreprocessing/**/*.{vue,js,ts}"]
+                      },
+                      "backend": {
+                        "exists": false,
+                        "reason": "未找到对应API端点或Controller",
+                        "searched_keywords": ["vendor", "device", "厂商"],
+                        "searched_paths": ["sdc-cloud-governance/src/main/java/**/*Controller.java"]
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "设备厂商目录删除",
+                  "input_path": "安全数据预处理-数据解析-解析规则-设备厂商目录删除"
+                }
+              ]
+            },
+            {
+              "name": "解析规则内置",
+              "input_path": "安全数据预处理-数据解析-解析规则内置"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+**节点类型说明：**
+
+| 层级 | 节点类型 | 字段 |
+|:-----|:---------|:-----|
+| 一级/二级/三级模块 | 中间节点 | `name` + `children[]` |
+| 功能过程（有 JSON 结果） | 叶节点 | `name` + `evidence`（含 `input_path`、`exists`、`reason`、`details`） |
+| 功能过程（无 JSON 结果） | 叶节点 | `name` + `input_path` |
+
+---
+
+## 11. 报告导出（带颜色标记）
 
 根据任务执行结果，生成带颜色标记的 Excel 文件。
 
@@ -309,7 +394,7 @@ POST /cosmic/report_excel
 
 ---
 
-## 11. 健康检查
+## 12. 健康检查
 
 ```
 GET /cosmic/health

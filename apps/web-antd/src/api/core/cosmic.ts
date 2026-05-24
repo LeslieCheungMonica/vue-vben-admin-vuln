@@ -59,6 +59,36 @@ export namespace CosmicApi {
     status: string;
     message: string;
   }
+
+  export interface EvidenceDetail {
+    exists: boolean;
+    reason: string;
+    searched_keywords?: string[];
+    searched_paths?: string[];
+  }
+
+  export interface Evidence {
+    input_path: string;
+    exists: boolean;
+    reason: string;
+    details?: {
+      frontend?: EvidenceDetail;
+      backend?: EvidenceDetail;
+    };
+  }
+
+  export interface TaskDetailNode {
+    name: string;
+    children?: TaskDetailNode[];
+    evidence?: Evidence;
+  }
+
+export interface TaskDetailResult {
+  status: string;
+  total?: number;
+  tree?: TaskDetailNode[];
+  message?: string;
+}
 }
 
 export async function getCosmicResourceListApi() {
@@ -141,4 +171,11 @@ export async function exportCosmicReportApi(taskId: string) {
     { task_id: taskId },
     { responseType: 'blob' },
   );
+}
+
+export async function getCosmicTaskDetailApi(taskId: string) {
+  const { data } = await baseRequestClient.post<
+    ApiResponse<CosmicApi.TaskDetailResult>
+  >('/cosmic/task_detail', { task_id: taskId });
+  return data;
 }
