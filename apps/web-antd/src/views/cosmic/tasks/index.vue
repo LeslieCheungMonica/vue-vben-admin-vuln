@@ -287,7 +287,7 @@ onMounted(() => {
           <template v-if="column.key === 'action'">
             <Space :size="4">
               <Tooltip
-                v-if="record.status === 'pending' || record.status === 'stopped'"
+                v-if="record.status === 'pending' || record.status === 'stopped' || record.status === 'finish'"
                 title="启动任务"
               >
                 <Button size="small" type="primary" @click="handleStart(record)">
@@ -303,7 +303,6 @@ onMounted(() => {
                 </Button>
               </Tooltip>
               <Tooltip
-                v-if="record.status === 'finish'"
                 title="导出报告"
               >
                 <Button size="small" @click="handleExport(record.task_id, record.task_name)">
