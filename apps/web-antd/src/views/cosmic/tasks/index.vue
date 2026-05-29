@@ -287,7 +287,7 @@ onMounted(() => {
           <template v-if="column.key === 'action'">
             <Space :size="4">
               <Tooltip
-                v-if="record.status === 'pending' || record.status === 'stopped' || record.status === 'finish'"
+                v-if="record.status === 'pending' || record.status === 'stopped' || record.status === 'finish' || record.status === 'run-except'"
                 title="启动任务"
               >
                 <Button size="small" type="primary" @click="handleStart(record)">

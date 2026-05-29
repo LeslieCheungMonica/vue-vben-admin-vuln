@@ -464,7 +464,7 @@ onUnmounted(() => {
           <span class="inline-block h-2 w-2 rounded-full" :style="{ backgroundColor: eventStreamConnected ? '#52c41a' : '#d9d9d9' }"></span>
           <span class="text-xs text-gray-400">{{ eventStreamConnected ? '已连接' : '未连接' }}</span>
         </div>
-        <div ref="eventStreamContainer" class="flex-1 overflow-y-auto p-4" style="min-height: 400px; max-height: 540px">
+        <div ref="eventStreamContainer" class="flex-1 overflow-y-auto p-4" style="min-height: 400px; max-height: 540px; overflow-x: hidden">
           <template v-if="mergedDisplayItems.length === 0">
             <div class="pt-16 text-center text-gray-400">
               <div class="mb-2 text-3xl">⚡</div>
@@ -491,13 +491,17 @@ onUnmounted(() => {
                   <span class="text-xs font-medium text-gray-500">{{ item.toolName || '工具调用' }}</span>
                   <Tag v-if="item.toolStatus" :color="item.toolStatus === 'completed' ? 'success' : item.toolStatus === 'running' ? 'processing' : 'default'">{{ item.toolStatus }}</Tag>
                 </div>
-                <div v-if="item.toolInput" class="mb-1 rounded bg-gray-100 p-2 text-xs text-gray-500">
-                  <div class="mb-0.5 font-medium">输入:</div>
-                  <pre class="whitespace-pre-wrap break-all">{{ item.toolInput }}</pre>
+                <div v-if="item.toolInput && !item.hideContent" class="mb-1 rounded bg-gray-100 p-2 text-xs text-gray-600 font-mono" style="word-break: break-all; white-space: pre-wrap;">
+                  {{ item.toolInput }}
                 </div>
-                <div v-if="item.toolOutput && !item.hideContent" class="rounded bg-gray-50 p-2 text-xs text-gray-500">
-                  <div class="mb-0.5 font-medium">输出:</div>
-                  <pre class="whitespace-pre-wrap break-all">{{ item.toolOutput }}</pre>
+                <div v-if="item.toolInput && item.hideContent" class="mb-1 truncate rounded bg-gray-50 p-2 text-xs text-gray-400 font-mono" :title="item.toolInput">
+                  {{ item.toolInput.slice(0, 80) }}...
+                </div>
+                <div v-if="item.toolOutput && !item.hideContent" class="rounded bg-green-50 p-2 text-xs text-green-700 font-mono" style="word-break: break-all; white-space: pre-wrap;">
+                  {{ item.toolOutput }}
+                </div>
+                <div v-if="item.toolOutput && item.hideContent" class="truncate rounded bg-gray-50 p-2 text-xs text-gray-400 font-mono" :title="item.toolOutput">
+                  {{ item.toolOutput.slice(0, 80) }}...
                 </div>
               </div>
             </div>

@@ -19,7 +19,7 @@ function remove_image() {
 function install_dependencies() {
     # Install all dependencies
     cd ${SCRIPT_DIR}
-    pnpm install || ERROR="install_dependencies failed"
+    pnpm install --force || ERROR="install_dependencies failed"
 }
 
 function build_image() {
